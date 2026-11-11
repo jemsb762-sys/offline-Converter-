@@ -56,8 +56,25 @@ var mode="pdf2word",file=null,out=null,outName="";
 var $=function(i){return document.getElementById(i)};
 var FONT='system-ui,"Noto Sans Ethiopic",Kefa,Nyala,"Abyssinica SIL",sans-serif';
 
-function lib(k){var L=LIBS[k];if(window[L.g])return Promise.resolve();
- return new Promise(function(res,rej){var s=document.createElement("script");s.onload=res;s.onerror=function(){rej(new Error("Could not load "+k+". Open the app once while online so it can be saved."))};s.src=L.u;document.head.appendChild(s)})}
+function lib(k){
+ var L=LIBS[k];
+ if(window[L.g])return Promise.resolve();
+ return fetch(L.u).then(function(r){
+  if(!r.ok)throw new Error("Could not load "+k+". Open the app once while online so it can be saved.");
+  return r.blob();
+ }).then(function(blob){
+  return new Promise(function(res,rej){
+   var url=URL.createObjectURL(blob);
+   var s=document.createElement("script");
+   s.onload=function(){URL.revokeObjectURL(url);res()};
+   s.onerror=function(){URL.revokeObjectURL(url);rej(new Error("Could not load "+k+". Open the app once while online so it can be saved."))};
+   s.src=url;
+   document.head.appendChild(s);
+  });
+ }).catch(function(e){
+  throw new Error((e&&e.message)||("Could not load "+k+". Open the app once while online so it can be saved."));
+ });
+}
 function renderOpts(){
  $("opts").innerHTML="";
  Object.keys(MODES).forEach(function(k){
@@ -196,7 +213,18 @@ $("sv").onclick=function(){
  document.body.appendChild(a);a.click();a.remove();msg("✅ Saved");
 };
 renderOpts();renderInput();
-if("serviceWorker" in navigator)navigator.serviceWorker.register("sw.js").catch(function(){});
+if("serviceWorker" in navigator){
+  navigator.serviceWorker.register("sw.js").then(function(reg){
+    // Force update check
+    if(reg.update)reg.update();
+  }).catch(function(){});
+}
+// Preload critical libs while online so they are cached and ready
+if(navigator.onLine){
+  ["jszip","docx","pdflib","pptx"].forEach(function(k){
+    lib(k).catch(function(){});
+  });
+}
 </script>
 </body>
 </html>
